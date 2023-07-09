@@ -128,14 +128,15 @@ def time_key_release(key):
     global t
     global time_held
     global sync_list
-    time_held=round(time.time()-t,2)
+    time_held=round(time.time()-t,2)*2 #for some reason the timer would be on average 1/2 of how much real time passed, maybe just my own pc though
     if syncing:
         if key!=Key.f9 and key!=Key.f10:
             sync_list.append([key,time_held])
     print(sync_list)
 
 def input_sync(windows):
-    vk_map={'w':0x57,'a':0x41,'s':0x53,'d':0x44,'p':0x55,Key.shift:0xA0,Key.ctrl_l: 0xA2,Key.space:0x20,Key.home:0x24,Key.end:0x23}
+    vk_map={"'w'":0x57,"'a'":0x41,"'s'":0x53,"'d'":0x44,"'p'":0x55,'Key.shift':0xA0,'Key.ctrl_l': 0xA2,'Key.space':0x20,'Key.home':0x24,'Key.end':0x23}
+    #yes doing this string thing is goofy, but its the only way i could get the map to work properly with how the different key types are output into the list by win32
     s=sched.scheduler(time.time,time.sleep)
     offset_time=0
     global key
@@ -143,7 +144,7 @@ def input_sync(windows):
     for window in windows:
         runtime=0
         for input in sync_list:
-            press_keyboard(window,s,vk_map[input[0]],offset_time+runtime,input[1])
+            press_keyboard(window,s,vk_map[str(input[0])],offset_time+runtime,input[1])
             runtime+=input[1]
         offset_time+=.31
     s.run()
