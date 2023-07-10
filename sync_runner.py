@@ -3,12 +3,21 @@ import win32con
 import win32gui
 import win32ui
 import win32api
-import pyautogui
 import win32com.client
 import os
 import pynput
-#from pynput.keyboard import Key,Listener
 import sched
+
+def on_f9(key):
+    global syncing
+    if key==pynput.keyboard.Key.f9:
+        if syncing:
+            print("Sync: Off")
+            syncing=False
+        else:
+            print("Sync: On")
+            global running_time;running_time=time.time()
+            syncing=True
 
 def on_f10(key):
     if key==pynput.keyboard.Key.f10:
@@ -52,7 +61,7 @@ def auto_input(windows,script):
                 press_keyboard(window,s,vk_map[button[0]],float(button[1])+offset_time,float(button[2].strip()))
                 offset_time+=.31
             elif button[0] in mouse_map:
-                press_mouse(window,s,mouse_map[button[0]],float(button[1])+offset_time,int(button[2]),int(button[3].strip())) #no hold time for mouse button rn, only does clicks atm
+                press_mouse(window,s,mouse_map[button[0]],float(button[1])+offset_time+.03,float(button[2]),float(button[3].strip())) #no hold time for mouse button rn, only does clicks atm
                 offset_time+=.31
         s.run()
 
@@ -69,6 +78,12 @@ def press_keyboard(window,s:sched.scheduler,key,start_time,hold_time):
 def press_mouse(window,s:sched.scheduler,key,start_time,winx,winy):
     prio=2
     foreground_time=.02
+    rect=win32gui.GetWindowRect(window)
+    width=rect[2]-rect[0]
+    height=rect[3]-rect[1]
+    winx=int((width*winx)+rect[0])
+    winy=int((height*winy)+rect[1])
+
     if key=='L':
         s.enter(start_time-foreground_time,prio,win32gui.SetForegroundWindow,argument=(window,))
 
@@ -107,9 +122,14 @@ def pull_script(filename):
     return out_list
 
 def scripty(windows):
-    #file_name=input("Script File Name: ")
-    file_name='test'
-    script=pull_script(file_name+".txt")
+    while True:
+        file_name=input("Script File Name: ")
+        #file_name='test'
+        try:
+            script=pull_script(file_name+".txt")
+            break
+        except FileNotFoundError:
+            continue
     auto_input(windows,script)
 
 
@@ -121,10 +141,10 @@ def time_key_release(key):
     global t
     global time_held
     global sync_list
-    time_held=round(time.time()-t,2)*2 #for some reason the timer would be on average 1/2 of how much real time passed, maybe just my own pc though
+    time_held=(time.time()-t)*2 #for some reason the timer would be on average 1/2 of how much real time passed, maybe just my own pc though
     if syncing:
         if key!=pynput.keyboard.Key.f9 and key!=pynput.keyboard.Key.f10:
-            sync_list.append([key,time_held])
+            sync_list.append([key,time_held,t-running_time])
             print(sync_list)
 
 def mouse_click(x,y,button,placeholder_bool): #the listener puts in a bool so i need the placeholder to avoid an error
@@ -134,11 +154,13 @@ def mouse_click(x,y,button,placeholder_bool): #the listener puts in a bool so i 
         rect=win32gui.GetWindowRect(foreground_window)
         winx=rect[0]
         winy=rect[1]
+        width=rect[2]-winx
+        height=rect[3]-winy
         in_window_x=x-winx
         in_window_y=y-winy
-        mouse_list.append([button,in_window_x,in_window_y])
+        mouse_list.append([button,in_window_x/width,in_window_y/height,time.time()-running_time])
         if len(mouse_list)==2:
-            sync_list.append([mouse_list[1][0],mouse_list[1][1],mouse_list[1][2]])
+            sync_list.append([mouse_list[1][0],mouse_list[1][1],mouse_list[1][2],mouse_list[1][3]])
             mouse_list=[]
             print(sync_list)
 
@@ -151,36 +173,21 @@ def input_sync(windows):
     global key
     global time_held
     for window in windows:
-        runtime=0
         for input in sync_list:
             if str(input[0]) in vk_map:
-                press_keyboard(window,s,vk_map[str(input[0])],offset_time+runtime,input[1])
-                runtime+=input[1]
+                press_keyboard(window,s,vk_map[str(input[0])],offset_time+input[2],input[1])
                 offset_time+=.31
-            elif str(input[0]) in mouse_map:
-                rect=win32gui.GetWindowRect(window)
-                winx=rect[0]
-                winy=rect[1]
-                press_mouse(window,s,mouse_map[str(input[0])],offset_time+runtime+.01,input[1]+winx,input[2]+winy)
-                runtime+=.1
+            elif input[0] in mouse_map:
+                press_mouse(window,s,mouse_map[input[0]],offset_time+input[3]+.03,input[1],input[2])
                 offset_time+=.31
     s.run()
 
 def main():
-    scripting=False #change to True if doing scripts, False for synching
+    scripting=True #change to True if doing scripts, False for synching
     global syncing;syncing=False
     global sync_list;sync_list=[]
     global key;key=''
     global mouse_list;mouse_list=[]
-    def on_f9(key):
-        global syncing
-        if key==pynput.keyboard.Key.f9:
-            if syncing:
-                print("Sync: Off")
-                syncing=False
-            else:
-                print("Sync: On")
-                syncing=True
 
     start_end=pynput.keyboard.Listener(on_release=on_f9)
     prgm_end=pynput.keyboard.Listener(on_release=on_f10)
@@ -203,6 +210,7 @@ def main():
             if not syncing and sync_list!=[]:
                 input_sync(window_list)
                 sync_list=[]
+                print("Syncing Done. Press f9 to start again.")
 
 if __name__ == "__main__":
     main()
